@@ -9,3 +9,4 @@ dist/
 .cache/
 .eslintcache
 logs/
+.test_scripts/
