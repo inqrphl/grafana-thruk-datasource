@@ -20,3 +20,40 @@ datasources:
     secureJsonData:
       apiKey: 'api-key'
       basicAuthPassword: test
+
+  - name: 'thruk-dev-datasource'
+    uid: 'thruk-dev-datasource'
+    type: 'sni-thruk-datasource'
+    url: 'https://192.168.200.201/dev/thruk'
+    access: proxy
+    isDefault: false
+    orgId: 1
+    version: 1
+    editable: true
+    basicAuth: false
+    jsonData:
+      path: '/resources'
+      logPath: '/root/sni-thruk-datasource/logs/thruk-dev-datasource.log'
+      logLevel: 3
+      tlsSkipVerify: true
+
+
+  - name: 'thruk-dev-datasource-alerting'
+    uid: 'thruk-dev-datasource-alerting'
+    type: 'sni-thruk-datasource'
+    url: 'https://192.168.200.201/dev/thruk'
+    access: proxy
+    isDefault: false
+    orgId: 1
+    version: 1
+    editable: true
+    basicAuth: false
+    jsonData:
+      path: '/resources'
+      logPath: '/root/sni-thruk-datasource/logs/thruk-dev-datasource.log'
+      logLevel: 3
+      tlsSkipVerify: true
+      httpHeaderName1: X-Thruk-Auth-Key
+    secureJsonData:
+      #httpHeaderValue1: asdasd # superuser api_key
+      httpHeaderValue1: asdasd # api key
