@@ -38,6 +38,15 @@ type queryModel struct {
 	// can be a string
 	// can be a object {"label": "Timeseries","value": "graph"}
 	Type any `json:"type"`
+
+	// metadata injected by the frontend for backend logging/auditing
+	DashboardUID   string `json:"dashboardUID,omitempty"`
+	DashboardTitle string `json:"dashboardTitle,omitempty"`
+	PanelId        int64  `json:"panelId,omitempty"`
+	PanelName      string `json:"panelName,omitempty"`
+	PanelPluginId  string `json:"panelPluginId,omitempty"`
+	App            string `json:"app,omitempty"`
+	RequestUrl     string `json:"requestUrl,omitempty"`
 }
 
 // This type saves elements of "meta"."columns" array in wrapped_json type of Thruk responses
@@ -243,11 +252,12 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	d.logger.Printf("[datasource: %s] [QueryData] received %d queries", d.uid, len(req.Queries))
+	meta := buildQueryMeta(ctx, req)
+	d.logger.Printf("[datasource: %s] [QueryData] %s received %d queries", d.uid, meta.String(), len(req.Queries))
 
 	response := backend.NewQueryDataResponse()
 	for _, q := range req.Queries {
-		res := d.query(ctx, q)
+		res := d.query(ctx, q, meta)
 		response.Responses[q.RefID] = res
 	}
 
@@ -257,15 +267,25 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return response, nil
 }
 
-func (d *Datasource) query(ctx context.Context, query backend.DataQuery) backend.DataResponse {
+func (d *Datasource) query(ctx context.Context, query backend.DataQuery, meta *queryMeta) backend.DataResponse {
 	var qm queryModel
 	if err := json.Unmarshal(query.JSON, &qm); err != nil {
 		d.logger.Printf("[QueryData] refId=%s unmarshal error: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
 	}
 
-	d.logger.Printf("[QueryData] refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
-		query.RefID, qm.Table, qm.Columns, qm.Condition, qm.Limit, qm.Type)
+	// merge the frontend-injected dashboard/panel context into a per-query copy
+	qmeta := *meta
+	qmeta.DashboardUID = qm.DashboardUID
+	qmeta.DashboardTitle = qm.DashboardTitle
+	qmeta.PanelId = qm.PanelId
+	qmeta.PanelName = qm.PanelName
+	qmeta.PanelPluginId = qm.PanelPluginId
+	qmeta.App = qm.App
+	qmeta.RequestUrl = qm.RequestUrl
+
+	d.logger.Printf("[QueryData] %s refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
+		qmeta.String(), query.RefID, qm.Table, qm.Columns, qm.Condition, qm.Limit, qm.Type)
 
 	rewriteAliasedEndpoints(&qm)
 
@@ -275,7 +295,7 @@ func (d *Datasource) query(ctx context.Context, query backend.DataQuery) backend
 	thrukURL := d.buildQueryURL(qm)
 	d.logger.Printf("[HTTP] GET %s", thrukURL)
 
-	cachedResult, err := getCachedResult(&qm, d.uid, thrukURL, nil)
+	cachedResult, err := getCachedResult(&qm, d.uid, thrukURL, &qmeta.authHeaders)
 	if err != nil {
 		d.logger.Printf("[CACHE] error when getting cached result: %s", err.Error())
 	}
@@ -290,6 +310,12 @@ func (d *Datasource) query(ctx context.Context, query backend.DataQuery) backend
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to create request: %v", err))
 	}
 	req.Header.Set("X-THRUK-OutputFormat", "wrapped_json")
+
+	// The SDK forwards headers itself when ForwardHTTPHeaders is enabled, but still
+	// set the Cookie explicitly as a safety net for requests without a Grafana frontend session (e.g. alerting).
+	if cookies := qmeta.authHeaders["Cookie"]; len(cookies) > 0 {
+		req.Header.Set("Cookie", strings.Join(cookies, "; "))
+	}
 
 	start := time.Now()
 	resp, err := d.httpClient.Do(req)
@@ -316,7 +342,7 @@ func (d *Datasource) query(ctx context.Context, query backend.DataQuery) backend
 	result := d.parseThrukResponse(body, qm, query.TimeRange)
 	d.logger.Printf("[QueryData] refId=%s parsed in %v", query.RefID, time.Since(parseStart))
 
-	err = writeCachedResult(&qm, d.uid, thrukURL, nil, &result)
+	err = writeCachedResult(&qm, d.uid, thrukURL, &qmeta.authHeaders, &result)
 	if err != nil {
 		d.logger.Printf("[CACHE] error when writing cached result: %s", err.Error())
 	}

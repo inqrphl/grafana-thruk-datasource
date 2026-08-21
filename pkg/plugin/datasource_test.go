@@ -2,13 +2,15 @@ package plugin
 
 import (
 	"context"
+	"io"
+	"log"
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
 func TestQueryData(t *testing.T) {
-	ds := Datasource{}
+	ds := Datasource{logger: log.New(io.Discard, "", 0)}
 
 	resp, err := ds.QueryData(
 		context.Background(),
