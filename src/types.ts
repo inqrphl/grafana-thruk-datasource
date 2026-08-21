@@ -7,6 +7,15 @@ export interface ThrukQuery extends DataQuery {
   condition: string;
   limit: number;
   type: 'table' | 'graph' | 'logs' | 'timeseries';
+
+  // metadata injected by the frontend for backend logging/auditing
+  dashboardUID?: string;
+  dashboardTitle?: string;
+  panelId?: number;
+  panelName?: string;
+  panelPluginId?: string;
+  app?: string;
+  requestUrl?: string;
 }
 
 export const defaultQuery: Partial<ThrukQuery> = {

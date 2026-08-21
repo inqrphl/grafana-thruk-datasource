@@ -7,7 +7,7 @@ import {
   ScopedVars,
   TimeRange,
 } from '@grafana/data';
-import { getTemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
+import { getTemplateSrv, DataSourceWithBackend, locationService } from '@grafana/runtime';
 import { Observable, of } from 'rxjs';
 
 import { ThrukQuery, ThrukDataSourceOptions, defaultQuery } from './types';
@@ -35,6 +35,7 @@ export class DataSource extends DataSourceWithBackend<ThrukQuery, ThrukDataSourc
         if (target.condition) {
           target.condition = this.replaceVariables(target.condition, request.range, request.scopedVars);
         }
+        this.injectQueryMetadata(target, request);
         return target;
       });
 
@@ -43,6 +44,33 @@ export class DataSource extends DataSourceWithBackend<ThrukQuery, ThrukDataSourc
     }
 
     return super.query({ ...request, targets });
+  }
+
+  injectQueryMetadata(target: ThrukQuery, request: DataQueryRequest<ThrukQuery>) {
+    if (request.app) {
+      target.app = request.app;
+    }
+    if (request.dashboardUID) {
+      target.dashboardUID = request.dashboardUID;
+    }
+    if (request.dashboardTitle) {
+      target.dashboardTitle = request.dashboardTitle;
+    }
+    if (request.panelId) {
+      target.panelId = request.panelId;
+    }
+    if (request.panelName) {
+      target.panelName = request.panelName;
+    }
+    if (request.panelPluginId) {
+      target.panelPluginId = request.panelPluginId;
+    }
+    if (!target.requestUrl && locationService) {
+      const location = locationService.getLocation();
+      if (location) {
+        target.requestUrl = location.pathname + location.search;
+      }
+    }
   }
 
   async metricFindQuery(query_string: string, _options?: any): Promise<MetricFindValue[]> {
