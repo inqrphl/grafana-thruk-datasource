@@ -1,12 +1,18 @@
 import React from 'react';
 import { InlineField, Input } from '@grafana/ui';
-import { ConnectionSettings, ConfigSection, Auth, AdvancedHttpSettings, convertLegacyAuthProps } from '@grafana/plugin-ui';
+import {
+  ConnectionSettings,
+  ConfigSection,
+  Auth,
+  AdvancedHttpSettings,
+  convertLegacyAuthProps,
+} from '@grafana/plugin-ui';
 import { DataSourcePluginOptionsEditorProps, LogLevel } from '@grafana/data';
 import { ThrukDataSourceOptions } from '../types';
 
 interface Props extends DataSourcePluginOptionsEditorProps<ThrukDataSourceOptions> {}
 
-export function ConfigEditor (props: Props) {
+export function ConfigEditor(props: Props) {
   const { onOptionsChange, options } = props;
 
   const optionsDefaulted = {
@@ -15,10 +21,9 @@ export function ConfigEditor (props: Props) {
       ...options.jsonData,
       keepCookies: options.jsonData.keepCookies || ['thruk_auth'],
       logLevel: options.jsonData.logLevel || 0,
-      logPath: options.jsonData.logPath || "$HOME/var/log/grafana/thruk-grafana-plugin.log"
-    }
-  }
-
+      logPath: options.jsonData.logPath || '$HOME/var/log/grafana/thruk-grafana-plugin.log',
+    },
+  };
 
   const onLogLevelChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({
@@ -26,7 +31,7 @@ export function ConfigEditor (props: Props) {
       jsonData: {
         ...options.jsonData,
         logLevel: Number(event.target.value),
-      }
+      },
     });
   };
 
@@ -36,7 +41,7 @@ export function ConfigEditor (props: Props) {
       jsonData: {
         ...options.jsonData,
         logPath: event.target.value,
-      }
+      },
     });
   };
 
@@ -45,11 +50,7 @@ export function ConfigEditor (props: Props) {
   // https://github.com/grafana/plugin-ui/blob/main/src/components/ConfigEditor/migrating-from-datasource-http-settings.md
   return (
     <>
-
-      <ConnectionSettings
-        config={optionsDefaulted}
-        onChange={props.onOptionsChange}
-      />
+      <ConnectionSettings config={optionsDefaulted} onChange={props.onOptionsChange} />
 
       <Auth
         {...convertLegacyAuthProps({
@@ -58,18 +59,15 @@ export function ConfigEditor (props: Props) {
         })}
       />
 
-      <ConfigSection
-        title="Advanced settings"
-        isCollapsible
-        isInitiallyOpen={true}
-      >
+      <ConfigSection title="Advanced settings" isCollapsible isInitiallyOpen={true}>
+        <AdvancedHttpSettings config={optionsDefaulted} onChange={props.onOptionsChange} />
 
-        <AdvancedHttpSettings
-          config={optionsDefaulted}
-          onChange={props.onOptionsChange}
-        />
-
-        <InlineField label="Log Level" labelWidth={14} interactive tooltip={'LogLevel to use for the plugin. Level 0 disables logging'}>
+        <InlineField
+          label="Log Level"
+          labelWidth={14}
+          interactive
+          tooltip={'LogLevel to use for the plugin. Level 0 disables logging'}
+        >
           <Input
             id="config-editor-path"
             onChange={onLogLevelChange}
@@ -79,7 +77,12 @@ export function ConfigEditor (props: Props) {
           />
         </InlineField>
 
-        <InlineField label="Log Path" labelWidth={14} interactive tooltip={'Log Path to use for the plugin. Can specify $HOME or %APPDATA% etc. as path placeholders'}>
+        <InlineField
+          label="Log Path"
+          labelWidth={14}
+          interactive
+          tooltip={'Log Path to use for the plugin. Can specify $HOME or %APPDATA% etc. as path placeholders'}
+        >
           <Input
             id="config-editor-path"
             onChange={onLogPathChange}
@@ -88,11 +91,7 @@ export function ConfigEditor (props: Props) {
             width={40}
           />
         </InlineField>
-
       </ConfigSection>
-
     </>
-
-
   );
 }

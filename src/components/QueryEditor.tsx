@@ -55,9 +55,7 @@ export const QueryEditor = (props: Props) => {
   const loadTables = (filter?: string): Promise<string[]> => {
     return fetchTables()
       .then(prependDashboardVariables)
-      .then((data) =>
-        data.filter((item) => !filter || (item && item.toLowerCase().includes(filter.toLowerCase())))
-      );
+      .then((data) => data.filter((item) => !filter || (item && item.toLowerCase().includes(filter.toLowerCase()))));
   };
 
   const fetchColumns = (): Promise<string[]> => {
@@ -101,9 +99,7 @@ export const QueryEditor = (props: Props) => {
         return data;
       })
       .then(prependDashboardVariables)
-      .then((data) =>
-        data.filter((item) => !filter || (item && item.toLowerCase().includes(filter.toLowerCase())))
-      );
+      .then((data) => data.filter((item) => !filter || (item && item.toLowerCase().includes(filter.toLowerCase()))));
   };
 
   const onValueChange = (key: keyof ThrukQuery, value: any) => {
@@ -178,11 +174,7 @@ export const QueryEditor = (props: Props) => {
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="thruk-columns-list" direction="horizontal">
             {(provided, snapshot) => (
-              <div
-                ref={provided.innerRef}
-                style={getListStyle(snapshot.isDraggingOver)}
-                {...provided.droppableProps}
-              >
+              <div ref={provided.innerRef} style={getListStyle(snapshot.isDraggingOver)} {...provided.droppableProps}>
                 {queryDefaulted.columns.map((sel, index) => (
                   <Draggable key={'thruk-col' + index} draggableId={'thruk-col' + index} index={index}>
                     {(provided, snapshot) => (
