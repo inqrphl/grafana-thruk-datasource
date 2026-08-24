@@ -112,7 +112,7 @@ func parseVisualizationType(typeVal any) string {
 
 // if we know the table used in query model, we can iterate through the columns and add their backend types by hand
 // this is a band-aid fix, only use it if thruk does not report column type metadata incorrectly.
-func overrideKnownGrafanaDataTypes(qm *queryModel, meta *ThrukWrappedJsonResponseMeta) {
+func overrideKnownGrafanaDataTypes(qm *QueryModel, meta *ThrukWrappedJsonResponseMeta) {
 
 	findAndChangeType := func(meta *ThrukWrappedJsonResponseMeta, name string, t data.FieldType) {
 		for i := range meta.Columns {

@@ -116,7 +116,7 @@ func TestCacheHeaderScoping(t *testing.T) {
 	hdrA := &map[string][]string{"Cookie": {"thruk_auth=AAA"}}
 	hdrB := &map[string][]string{"Cookie": {"thruk_auth=BBB"}}
 
-	if err := writeCachedResult(&queryModel{Table: "/index"}, "ds-1", thrukURL, hdrA, &backend.DataResponse{}); err != nil {
+	if err := writeCachedResult(&QueryModel{Table: "/index"}, "ds-1", thrukURL, hdrA, &backend.DataResponse{}); err != nil {
 		t.Fatalf("failed to write cached result: %v", err)
 	}
 

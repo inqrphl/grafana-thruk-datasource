@@ -24,27 +24,6 @@ var (
 
 const defaultLimit = 1000
 
-// What a query coming in from Grafana will contain
-// Defined in types.ts as ThrukQuery in frontend part.
-type queryModel struct {
-	Table     string   `json:"table"`
-	Columns   []string `json:"columns"`
-	Condition string   `json:"condition"`
-	Limit     int      `json:"limit"`
-	// can be a string
-	// can be a object {"label": "Timeseries","value": "graph"}
-	Type any `json:"type"`
-
-	// metadata injected by the frontend for backend logging/auditing
-	DashboardUID   string `json:"dashboardUID,omitempty"`
-	DashboardTitle string `json:"dashboardTitle,omitempty"`
-	PanelId        int64  `json:"panelId,omitempty"`
-	PanelName      string `json:"panelName,omitempty"`
-	PanelPluginId  string `json:"panelPluginId,omitempty"`
-	App            string `json:"app,omitempty"`
-	RequestUrl     string `json:"requestUrl,omitempty"`
-}
-
 // This struct contains our own definition of the Datasource and the components it needs
 // It should implement CheckHealth() , Query() , Dispose() , CallResource() etc.
 type Datasource struct {

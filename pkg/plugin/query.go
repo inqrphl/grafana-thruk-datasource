@@ -15,6 +15,27 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
+// What a query coming in from Grafana will contain
+// Defined in types.ts as ThrukQuery in frontend part.
+type QueryModel struct {
+	Table     string   `json:"table"`
+	Columns   []string `json:"columns"`
+	Condition string   `json:"condition"`
+	Limit     int      `json:"limit"`
+	// can be a string
+	// can be a object {"label": "Timeseries","value": "graph"}
+	Type any `json:"type"`
+
+	// metadata injected by the frontend for backend logging/auditing
+	DashboardUID   string `json:"dashboardUID,omitempty"`
+	DashboardTitle string `json:"dashboardTitle,omitempty"`
+	PanelId        int64  `json:"panelId,omitempty"`
+	PanelName      string `json:"panelName,omitempty"`
+	PanelPluginId  string `json:"panelPluginId,omitempty"`
+	App            string `json:"app,omitempty"`
+	RequestUrl     string `json:"requestUrl,omitempty"`
+}
+
 // QueryMetadata captures per-request metadata from Grafana (user, org, headers)
 // plus the frontend-injected dashboard/panel context from the query JSON.
 type QueryMetadata struct {
@@ -100,7 +121,7 @@ func (m *QueryMetadata) String() string {
 }
 
 func query(ctx context.Context, datasource *Datasource, query backend.DataQuery, backendReq *backend.QueryDataRequest) backend.DataResponse {
-	var queryModel queryModel
+	var queryModel QueryModel
 	if err := json.Unmarshal(query.JSON, &queryModel); err != nil {
 		logger.Debugf("refId=%s unmarshal error: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
@@ -183,7 +204,7 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 	return result
 }
 
-func buildQueryURL(datasource *Datasource, qm queryModel) string {
+func buildQueryURL(datasource *Datasource, qm QueryModel) string {
 	rewriteAliasedEndpoints(&qm)
 
 	path := strings.TrimPrefix(qm.Table, "/")
@@ -209,7 +230,7 @@ func buildQueryURL(datasource *Datasource, qm queryModel) string {
 // The "data" field of the json can either be an array of objects or simply an object
 // Take a look under /docs/call-r-v1-hosts.sh for an array response.
 // Take a look under /docs/call-r-v1-services-totals.sh for an object example
-func parseThrukResponse(body []byte, qm queryModel, timeRange backend.TimeRange) backend.DataResponse {
+func parseThrukResponse(body []byte, qm QueryModel, timeRange backend.TimeRange) backend.DataResponse {
 	var thrukResp ThrukWrappedJsonResponse
 
 	// Try wrapped_json format: { "data": <array|object> , "meta": {...} }
@@ -262,7 +283,7 @@ func parseThrukResponse(body []byte, qm queryModel, timeRange backend.TimeRange)
 
 // This function assumes that thrukResponse.Data is of type []map[string]any
 // Even when the response was a single object, it is converted in parseThrukResponse method
-func buildTableFrame(qm *queryModel, thrukResp *ThrukWrappedJsonResponse, visType string) backend.DataResponse {
+func buildTableFrame(qm *QueryModel, thrukResp *ThrukWrappedJsonResponse, visType string) backend.DataResponse {
 
 	// add known query types from query model and columns
 	overrideKnownGrafanaDataTypes(qm, thrukResp.Meta)
@@ -381,7 +402,7 @@ func buildTableFrame(qm *queryModel, thrukResp *ThrukWrappedJsonResponse, visTyp
 // Each data row becomes its own frame. Columns with aggregation functions (e.g. "count()")
 // or numeric values become the value column; remaining columns form the series alias.
 // The value is spread across 10 evenly-spaced time points covering the query's time range.
-func buildTimeseriesFrames(thrukResp *ThrukWrappedJsonResponse, timeRange backend.TimeRange, qm queryModel) backend.DataResponse {
+func buildTimeseriesFrames(thrukResp *ThrukWrappedJsonResponse, timeRange backend.TimeRange, qm QueryModel) backend.DataResponse {
 	const steps = 10
 	from := timeRange.From.Unix()
 	to := timeRange.To.Unix()

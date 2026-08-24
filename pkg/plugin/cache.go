@@ -114,7 +114,7 @@ var (
 	}
 )
 
-func findCachePolicy(qm *queryModel, headers *map[string][]string) *CachePolicy {
+func findCachePolicy(qm *QueryModel, headers *map[string][]string) *CachePolicy {
 	for _, policy := range cachePolicies {
 		if policy.filterToTables != nil &&
 			qm == nil &&
@@ -132,7 +132,7 @@ func findCachePolicy(qm *queryModel, headers *map[string][]string) *CachePolicy 
 	return nil
 }
 
-func getCachedResult(qm *queryModel, datasourceUID string, thrukUrl string, headers *map[string][]string) (*CachedResult, error) {
+func getCachedResult(qm *QueryModel, datasourceUID string, thrukUrl string, headers *map[string][]string) (*CachedResult, error) {
 	cachedResultsMutex.RLock()
 	defer cachedResultsMutex.RUnlock()
 
@@ -154,7 +154,7 @@ func getCachedResult(qm *queryModel, datasourceUID string, thrukUrl string, head
 	return cachedResult, nil
 }
 
-func writeCachedResult(qm *queryModel, datasourceUID string, thrukUrl string, headers *map[string][]string, result *backend.DataResponse) error {
+func writeCachedResult(qm *QueryModel, datasourceUID string, thrukUrl string, headers *map[string][]string, result *backend.DataResponse) error {
 	if result == nil {
 		return fmt.Errorf("There is no result to write into the cache")
 	}
@@ -178,7 +178,7 @@ func writeCachedResult(qm *queryModel, datasourceUID string, thrukUrl string, he
 	return nil
 }
 
-func rewriteAliasedEndpoints(qm *queryModel) {
+func rewriteAliasedEndpoints(qm *QueryModel) {
 	// Aliases come from Thruk Docs
 	// https://www.thruk.org/documentation/rest.html
 
