@@ -273,7 +273,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 		d.logger.Printf("[Resource] failed to create request: %v", err)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,
-			Body:   []byte(fmt.Sprintf("failed to create request: %v", err)),
+			Body:   fmt.Appendf([]byte{}, "failed to create request: %v", err),
 		})
 	}
 
@@ -300,7 +300,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 		d.logger.Printf("[Resource] request failed after %v: %v", elapsed, err)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,
-			Body:   []byte(fmt.Sprintf("request failed: %v", err)),
+			Body:   fmt.Appendf([]byte{}, "request failed: %v", err),
 		})
 	}
 	defer resp.Body.Close()
@@ -310,7 +310,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 		d.logger.Printf("[Resource] failed to read response: %v", err)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,
-			Body:   []byte(fmt.Sprintf("failed to read response: %v", err)),
+			Body:   fmt.Appendf([]byte{}, "failed to read response: %v", err),
 		})
 	}
 
