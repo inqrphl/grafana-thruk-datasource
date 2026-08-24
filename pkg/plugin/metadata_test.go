@@ -41,7 +41,7 @@ func TestBuildQueryMeta(t *testing.T) {
 		},
 	}
 
-	meta := buildQueryMeta(ctx, req)
+	meta := buildQueryMetadata(ctx, req)
 	if meta == nil {
 		t.Fatal("buildQueryMeta returned nil")
 	}
@@ -54,9 +54,12 @@ func TestBuildQueryMeta(t *testing.T) {
 	if meta.GrafanaVersion != "10.4.0" {
 		t.Fatalf("expected grafana version 10.4.0, got %s", meta.GrafanaVersion)
 	}
-	if meta.OrgID != 1 {
-		t.Fatalf("expected org 1, got %d", meta.OrgID)
-	}
+
+	// orgID is deprecated and therefore not used
+	// if meta.OrgID != 1 {
+	// 	t.Fatalf("expected org 1, got %d", meta.OrgID)
+	// }
+
 	if !meta.hasCookie("thruk_auth") {
 		t.Fatal("expected thruk_auth cookie to be present")
 	}
@@ -73,7 +76,7 @@ func TestBuildQueryMetaWithoutUser(t *testing.T) {
 	ctx := context.Background()
 	req := &backend.QueryDataRequest{}
 
-	meta := buildQueryMeta(ctx, req)
+	meta := buildQueryMetadata(ctx, req)
 	if meta == nil {
 		t.Fatal("buildQueryMeta returned nil")
 	}

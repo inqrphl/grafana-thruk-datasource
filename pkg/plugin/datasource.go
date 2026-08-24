@@ -237,7 +237,7 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	meta := buildQueryMeta(ctx, req)
+	meta := buildQueryMetadata(ctx, req)
 	d.logger.Printf("[datasource: %s] [QueryData] %s received %d queries", d.uid, meta.String(), len(req.Queries))
 
 	response := backend.NewQueryDataResponse()
@@ -252,7 +252,7 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return response, nil
 }
 
-func (d *Datasource) query(ctx context.Context, query backend.DataQuery, meta *queryMeta) backend.DataResponse {
+func (d *Datasource) query(ctx context.Context, query backend.DataQuery, meta *queryMetadata) backend.DataResponse {
 	var qm queryModel
 	if err := json.Unmarshal(query.JSON, &qm); err != nil {
 		d.logger.Printf("[QueryData] refId=%s unmarshal error: %v", query.RefID, err)
