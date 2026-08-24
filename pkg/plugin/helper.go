@@ -129,21 +129,26 @@ func overrideKnownGrafanaDataTypes(qm *QueryModel, meta *ThrukWrappedJsonRespons
 }
 
 // Applies some default http Client settings and modifies defaults of backend.DatasourceInstanceSettings.HTTPClientOpts
-func httpclientOptionsSetDefaults(opts *httpclient.Options) {
+func HTTPClientOptionsSetDefaults(opts *httpclient.Options) {
 	// Always forward the headers, this is how 'thruk_auth' cookies should be passed
 	opts.ForwardHTTPHeaders = true
 
-	// Modify some of the timeouts
+	// Modify some of the timeouts and other settings. golang-sdk still calls this struct TimeoutOpts
+	// These end up in the golang http.Transport
+
 	opts.Timeouts = &httpclient.TimeoutOptions{
 		Timeout:               30 * time.Second,
 		DialTimeout:           10 * time.Second,
 		KeepAlive:             httpclient.DefaultTimeoutOptions.KeepAlive,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: httpclient.DefaultTimeoutOptions.ExpectContinueTimeout,
-		MaxConnsPerHost:       httpclient.DefaultTimeoutOptions.MaxConnsPerHost,
-		MaxIdleConns:          httpclient.DefaultTimeoutOptions.MaxIdleConns,
-		MaxIdleConnsPerHost:   httpclient.DefaultTimeoutOptions.MaxIdleConnsPerHost,
-		IdleConnTimeout:       httpclient.DefaultTimeoutOptions.IdleConnTimeout,
+		// MaxIdleConns controls the maximum number of idle (keep-alive) connections across all hosts. Zero means no limit.
+		MaxIdleConns: 0,
+		// MaxConnsPerHost optionally limits the total number of connections per host, including connections in the dialing, active, and idle states. On limit violation, dials will block. Zero means no limit.
+		MaxConnsPerHost: 0,
+		// MaxIdleConnsPerHost, if non-zero, controls the maximum idle (keep-alive) connections to keep per-host. If zero, the stdlib DefaultMaxIdleConnsPerHost (2) is used.
+		MaxIdleConnsPerHost: 0,
+		IdleConnTimeout:     httpclient.DefaultTimeoutOptions.IdleConnTimeout,
 	}
 }
 

@@ -85,7 +85,7 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 	if err != nil {
 		return nil, fmt.Errorf("failed to get http client options from context: %w", err)
 	}
-	httpclientOptionsSetDefaults(&httpOpts)
+	HTTPClientOptionsSetDefaults(&httpOpts)
 
 	logger.Debugf("http client options: %s", HTTPClientOptionsToString(httpOpts))
 
