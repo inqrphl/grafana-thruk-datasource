@@ -95,7 +95,7 @@ func anyToString(v any) string {
 // /src/thruk/lib/Thruk/Controller/Rest/V1
 // these types are defined in docs.pm and livestatus_docs.pm
 // [root@ebc5fefa4b7c V1]# grep -nrw '"type":' docs.pm > types.txt
-func inferFieldType(columnName string, columnMetadatas map[string]columnMetadata) (data.FieldType, string) {
+func inferFieldType(columnName string, columnMetadatas map[string]ThrukWrappedJsonResponseMetaColumn) (data.FieldType, string) {
 	if mc, ok := columnMetadatas[columnName]; ok {
 
 		// if the columnMetadata has a saved type, use it
@@ -134,7 +134,7 @@ func inferFieldType(columnName string, columnMetadatas map[string]columnMetadata
 }
 
 // Parses the optional units added in Thruk function _get_columns_meta_for_path on API calls
-func processUnitType(columnName string, columnMetadatas map[string]columnMetadata) {
+func processUnitType(columnName string, columnMetadatas map[string]ThrukWrappedJsonResponseMetaColumn) {
 	if mc, ok := columnMetadatas[columnName]; ok {
 		if mc.Config != nil {
 			if configStructConverted, convOk := mc.Config.(struct{ Unit string }); convOk {

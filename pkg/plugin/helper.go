@@ -45,7 +45,7 @@ func getQueryParam(rawURL string, key string) string {
 // works on wrapped_json calls where metadata is present, in such calls it looks for resp.Meta.Columns
 // or normal json calls where everything is on the same object, in such calls it looks for first row
 // docs/r-v1-hosts-response.json and docs/r1-v1-thruk-response.json
-func determineColumnsFromThrukResponse(resp *thrukResponse) []string {
+func determineColumnsFromThrukResponse(resp *ThrukWrappedJsonResponse) []string {
 	if resp.Meta != nil && len(resp.Meta.Columns) > 0 {
 		cols := make([]string, 0, len(resp.Meta.Columns))
 		for _, c := range resp.Meta.Columns {
@@ -65,8 +65,8 @@ func determineColumnsFromThrukResponse(resp *thrukResponse) []string {
 
 // builds a map from columnMetadata.Name -> columnMetadata
 // useful for fast lookups directly from name
-func buildColumnMetadataMap(resp *thrukResponse) map[string]columnMetadata {
-	m := make(map[string]columnMetadata)
+func buildColumnMetadataMap(resp *ThrukWrappedJsonResponse) map[string]ThrukWrappedJsonResponseMetaColumn {
+	m := make(map[string]ThrukWrappedJsonResponseMetaColumn)
 	if resp.Meta != nil {
 		for _, c := range resp.Meta.Columns {
 			m[c.Name] = c
@@ -134,9 +134,9 @@ func parseVisualizationType(typeVal any) string {
 
 // if we know the table used in query model, we can iterate through the columns and add their backend types by hand
 // this is a band-aid fix, only use it if thruk does not report column type metadata incorrectly.
-func overrideKnownGrafanaDataTypes(qm *queryModel, meta *thrukMetadata) {
+func overrideKnownGrafanaDataTypes(qm *queryModel, meta *ThrukWrappedJsonResponseMeta) {
 
-	findAndChangeType := func(meta *thrukMetadata, name string, t data.FieldType) {
+	findAndChangeType := func(meta *ThrukWrappedJsonResponseMeta, name string, t data.FieldType) {
 		for i := range meta.Columns {
 			if meta.Columns[i].Name == name {
 				meta.Columns[i].GrafanaDataType = t

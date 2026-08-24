@@ -1,5 +1,39 @@
 package plugin
 
+import (
+	"time"
+
+	"github.com/grafana/grafana-plugin-sdk-go/data"
+)
+
+// This type saves a wrapped_json type of Thruk response
+// { "data": [] , "meta": [] }
+type ThrukWrappedJsonResponse struct {
+	Data []map[string]any              `json:"data"`
+	Meta *ThrukWrappedJsonResponseMeta `json:"meta"`
+}
+
+// This type saves "meta" object in wrapped_json type of Thruk response
+// RequestDuration: is added later, not present in Thruk Response
+// ParseDuration: is added later, not present in Thruk response
+type ThrukWrappedJsonResponseMeta struct {
+	Columns         []ThrukWrappedJsonResponseMetaColumn `json:"columns"`
+	RequestDuration time.Duration                        `json:"requestDuration"`
+	ParseDuration   time.Duration                        `json:"parseDuration"`
+}
+
+// This type saves elements of "meta"."columns" array in wrapped_json type of Thruk responses
+// Most of the colum metadata only have "name"
+// Some might have "type" as well, taking values like: "time"
+// Some might have "config" which is a nested object like: { "unit" : "s"},
+// GrafanaDataType: added later, not present in Thruk Response. It serves to save the parsed Grafana SDK type in the same struct
+type ThrukWrappedJsonResponseMetaColumn struct {
+	Name            string         `json:"name"`
+	Type            string         `json:"type"`
+	GrafanaDataType data.FieldType `json:"grafanaDataType"`
+	Config          any            `json:"config"`
+}
+
 // ThrukAPIEndpoint represents all available REST API endpoints of Thruk.
 // Generated from Thruk's indexer JSON; type is int for easy comparison.
 // the indexer response can be found in docs/r-v1-index-response.json

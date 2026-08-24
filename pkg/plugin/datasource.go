@@ -49,34 +49,6 @@ type queryModel struct {
 	RequestUrl     string `json:"requestUrl,omitempty"`
 }
 
-// This type saves elements of "meta"."columns" array in wrapped_json type of Thruk responses
-// Most of the colum metadata only have "name"
-// Some might have "type" as well, taking values like: "time"
-// Some might have "config" which is a nested object like: { "unit" : "s"},
-// GrafanaDataType: added later, not present in Thruk Response. It serves to save the parsed Grafana SDK type in the same struct
-type columnMetadata struct {
-	Name            string         `json:"name"`
-	Type            string         `json:"type"`
-	GrafanaDataType data.FieldType `json:"grafanaDataType"`
-	Config          any            `json:"config"`
-}
-
-// This type saves "meta" object in wrapped_json type of Thruk response
-// RequestDuration: is added later, not present in Thruk Response
-// ParseDuration: is added later, not present in Thruk response
-type thrukMetadata struct {
-	Columns         []columnMetadata `json:"columns"`
-	RequestDuration time.Duration    `json:"requestDuration"`
-	ParseDuration   time.Duration    `json:"parseDuration"`
-}
-
-// This type saves a wrapped_json type of Thruk response
-// { "data": [] , "meta": [] }
-type thrukResponse struct {
-	Data []map[string]any `json:"data"`
-	Meta *thrukMetadata   `json:"meta"`
-}
-
 // This struct contains our own definition of the Datasource and the components it needs
 // It should implement CheckHealth() , Query() , Dispose() , CallResource() etc.
 type Datasource struct {
@@ -362,12 +334,12 @@ func (d *Datasource) buildQueryURL(qm queryModel) string {
 // Take a look under /docs/call-r-v1-hosts.sh for an array response.
 // Take a look under /docs/call-r-v1-services-totals.sh for an object example
 func (d *Datasource) parseThrukResponse(body []byte, qm queryModel, timeRange backend.TimeRange) backend.DataResponse {
-	var thrukResp thrukResponse
+	var thrukResp ThrukWrappedJsonResponse
 
 	// Try wrapped_json format: { "data": <array|object> , "meta": {...} }
 	var rawResponse struct {
-		Data json.RawMessage `json:"data"`
-		Meta *thrukMetadata  `json:"meta"`
+		Data json.RawMessage               `json:"data"`
+		Meta *ThrukWrappedJsonResponseMeta `json:"meta"`
 	}
 
 	if err := json.Unmarshal(body, &rawResponse); err == nil && rawResponse.Data != nil {
@@ -414,7 +386,7 @@ func (d *Datasource) parseThrukResponse(body []byte, qm queryModel, timeRange ba
 
 // This function assumes that thrukResponse.Data is of type []map[string]any
 // Even when the response was a single object, it is converted in parseThrukResponse method
-func (d *Datasource) buildTableFrame(qm *queryModel, thrukResp *thrukResponse, visType string) backend.DataResponse {
+func (d *Datasource) buildTableFrame(qm *queryModel, thrukResp *ThrukWrappedJsonResponse, visType string) backend.DataResponse {
 
 	// add known query types from query model and columns
 	overrideKnownGrafanaDataTypes(qm, thrukResp.Meta)
@@ -533,7 +505,7 @@ func (d *Datasource) buildTableFrame(qm *queryModel, thrukResp *thrukResponse, v
 // Each data row becomes its own frame. Columns with aggregation functions (e.g. "count()")
 // or numeric values become the value column; remaining columns form the series alias.
 // The value is spread across 10 evenly-spaced time points covering the query's time range.
-func (d *Datasource) buildTimeseriesFrames(thrukResp *thrukResponse, timeRange backend.TimeRange, qm queryModel) backend.DataResponse {
+func (d *Datasource) buildTimeseriesFrames(thrukResp *ThrukWrappedJsonResponse, timeRange backend.TimeRange, qm queryModel) backend.DataResponse {
 	const steps = 10
 	from := timeRange.From.Unix()
 	to := timeRange.To.Unix()
@@ -565,8 +537,8 @@ func (d *Datasource) buildTimeseriesFrames(thrukResp *thrukResponse, timeRange b
 		dataRows = converted
 		orderedColumns = []string{"__key", "__value"}
 		// Override meta types for the converted columns
-		metaColumns["__key"] = columnMetadata{Name: "__key"}
-		metaColumns["__value"] = columnMetadata{Name: "__value",
+		metaColumns["__key"] = ThrukWrappedJsonResponseMetaColumn{Name: "__key"}
+		metaColumns["__value"] = ThrukWrappedJsonResponseMetaColumn{Name: "__value",
 			GrafanaDataType: data.FieldTypeFloat64}
 	}
 
@@ -616,7 +588,7 @@ func (d *Datasource) buildTimeseriesFrames(thrukResp *thrukResponse, timeRange b
 }
 
 // finds the column with numerical values to use in timeseries visualization
-func findValueColumn(columns []string, metaColumns map[string]columnMetadata, dataRows []map[string]any) string {
+func findValueColumn(columns []string, metaColumns map[string]ThrukWrappedJsonResponseMetaColumn, dataRows []map[string]any) string {
 	if len(columns) == 0 {
 		return ""
 	}
