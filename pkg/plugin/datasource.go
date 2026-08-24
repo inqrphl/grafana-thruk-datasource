@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -52,8 +50,6 @@ type queryModel struct {
 type Datasource struct {
 	url        string
 	httpClient *http.Client
-	logger     *log.Logger
-	logFile    *os.File
 	uid        string
 }
 
@@ -97,8 +93,12 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 		}
 	}
 
-	logger, logFile := createLoggerFromDatasourceSettings(&jsonData)
-	logger.Printf("[NewDatasource] setttings:\n%s", DataSourceInstanceSettingsToString(&settings))
+	err := createLoggerFromDatasourceSettings(&jsonData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logger: %w", err)
+	}
+	logger = logger.With("datasource", settings.UID)
+	logger.Debugf("setttings:\n%s", DataSourceInstanceSettingsToString(&settings))
 
 	// SDK provides a way of building http client options directly from context. This sets
 	// Headers to forward, TLS configuration, Basic HTTP Authentication, Proxy, Timeouts, SigV4
@@ -108,7 +108,7 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 	}
 	httpclientOptionsSetDefaults(&httpOpts)
 
-	logger.Printf("[NewDatasource] http client options: %s", HTTPClientOptionsToString(httpOpts))
+	logger.Debugf("http client options: %s", HTTPClientOptionsToString(httpOpts))
 
 	provider := httpclient.NewProvider()
 	client, err := provider.New(httpOpts)
@@ -116,49 +116,41 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 		return nil, fmt.Errorf("couldnt create http client using provider: %w", err)
 	}
 
-	logger.Printf("[NewDatasource] creating new datasource with uid: %s", settings.UID)
-
 	return &Datasource{
 		url:        u,
 		httpClient: client,
-		logger:     logger,
-		logFile:    logFile,
 		uid:        settings.UID,
 	}, nil
 }
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) Dispose() {
-	if d.logger != nil {
-		d.logger.Println("Plugin instance disposed")
-	}
-	if d.logFile != nil {
-		d.logFile.Close()
-	}
+
 }
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	d.logger.Println("[CheckHealth] testing connection")
+	logger.Infof("testing connection")
 
 	thrukURL := d.url + "/r/v1/thruk?columns=thruk_version"
-	d.logger.Printf("[datasource: %s] [CheckHealth] GET %s\n", d.uid, thrukURL)
+	logger.Debugf("thrukUrl: %s\n", thrukURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {
-		d.logger.Printf("[CheckHealth] failed to create request: %v", err)
+		logger.Debugf("failed to create request: %v", err)
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("Failed to create request: %v", err),
 		}, nil
 	}
-	d.logger.Printf("[datasource: %s] [CheckHealth] Cookie Header: %s", d.uid, req.Header.Values("Cookie"))
+	logger.Debugf("Cookie Header Values: %s", strings.Join(req.Header.Values("Cookie"), ","))
 
+	logger.Debugf("HTTP GET %s\n", thrukURL)
 	start := time.Now()
 	resp, err := d.httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
-		d.logger.Printf("[datasource: %s] [CheckHealth] connection failed after %v: %v", d.uid, elapsed, err)
+		logger.Debugf("connection failed after %v: %v", d.uid, elapsed, err)
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("Connection failed: %v", err),
@@ -172,8 +164,8 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 		ThrukVersion string `json:"thruk_version"`
 	}
 
-	d.logger.Printf("[datasource: %s] [CheckHealth] response code: %d , elapsed: %v", d.uid, resp.StatusCode, elapsed)
-	d.logger.Printf("[datasource: %s] [CheckHealth] response body: %s", d.uid, string(body))
+	logger.Debugf("response code: %d , elapsed: %v", d.uid, resp.StatusCode, elapsed)
+	logger.Debugf("response body: %s", d.uid, string(body))
 
 	if resp.StatusCode != http.StatusOK {
 		return &backend.CheckHealthResult{
@@ -183,7 +175,7 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 
 	if err := json.Unmarshal(body, &CheckHealthResponseType); err != nil {
-		d.logger.Printf("[CheckHealth] failed to parse response: %v", err)
+		logger.Debugf("failed to parse response: %v", err)
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("Failed to parse response: %v", err),
@@ -191,14 +183,14 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 
 	if CheckHealthResponseType.ThrukVersion == "" {
-		d.logger.Println("[CheckHealth] no thruk_version in response")
+		logger.Debugf("no thruk_version in response")
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: "Invalid URL, did not find Thruk version in response",
 		}, nil
 	}
 
-	d.logger.Printf("[CheckHealth] connected to Thruk v%s", CheckHealthResponseType.ThrukVersion)
+	logger.Debugf("connected to Thruk v%s", CheckHealthResponseType.ThrukVersion)
 	return &backend.CheckHealthResult{
 		Status:  backend.HealthStatusOk,
 		Message: "Successfully connected to Thruk v" + CheckHealthResponseType.ThrukVersion,
@@ -208,7 +200,7 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	meta := buildQueryMetadata(ctx, req)
-	d.logger.Printf("[datasource: %s] [QueryData] %s received %d queries", d.uid, meta.String(), len(req.Queries))
+	logger.Debugf("received %d queries", len(req.Queries))
 
 	response := backend.NewQueryDataResponse()
 	for _, q := range req.Queries {
@@ -217,14 +209,14 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	}
 
 	//responseJSON, _ := response.DeepCopy().MarshalJSON()
-	//d.logger.Printf("[QueryData] response:\n%v", string(responseJSON))
+	//logger.Debugf("[QueryData] response:\n%v", string(responseJSON))
 
 	return response, nil
 }
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
-	d.logger.Printf("[Resource] path: %s url: %s", req.Path, req.URL)
+	logger.Debugf("path: %s url: %s", req.Path, req.URL)
 
 	var thrukPath string
 	var extraHeaders map[string]string
@@ -235,7 +227,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	case "columns":
 		table := getQueryParam(req.URL, "table")
 		if table == "" {
-			d.logger.Printf("[Resource] missing table parameter")
+			logger.Debugf("missing table parameter")
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
 				Body:   []byte("missing 'table' query parameter"),
@@ -244,13 +236,14 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 		table = strings.TrimPrefix(table, "/")
 		thrukPath = "/r/v1/" + table
 		extraHeaders = map[string]string{"X-Thruk-Output-Metadata-Only": "true"}
+
 	case "variable-query":
 		table := getQueryParam(req.URL, "table")
 		q := getQueryParam(req.URL, "q")
 		columns := getQueryParam(req.URL, "columns")
 		limit := getQueryParam(req.URL, "limit")
 		if table == "" {
-			d.logger.Printf("[Resource] variable-query missing table parameter")
+			logger.Debugf("[Resource] variable-query missing table parameter")
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
 				Body:   []byte("missing 'table' query parameter"),
@@ -261,16 +254,17 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 			"&q=" + url.QueryEscape(q) +
 			"&limit=" + url.QueryEscape(limit)
 		extraHeaders = map[string]string{"X-Thruk-Output-Metadata-Only": "true"}
+
 	default:
 		thrukPath = "/r/v1/" + strings.TrimPrefix(req.Path, "/")
 	}
 
 	thrukURL := d.url + thrukPath
-	d.logger.Printf("[Resource] GET thrukUrl: %s", thrukURL)
+	logger.Debugf("GET thrukUrl: %s", thrukURL)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {
-		d.logger.Printf("[Resource] failed to create request: %v", err)
+		logger.Debugf("failed to create request: %v", err)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,
 			Body:   fmt.Appendf([]byte{}, "failed to create request: %v", err),
@@ -285,10 +279,10 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	// case "columns", "variable-query":
 	// 	cachedResult, err := getCachedResult(nil, d.uid, thrukURL, (*map[string][]string)(&httpReq.Header))
 	// 	if err != nil {
-	// 		d.logger.Printf("[CACHE] error when getting cached result: %s", err.Error())
+	// 		logger.Debugf("[CACHE] error when getting cached result: %s", err.Error())
 	// 	}
 	// 	if cachedResult != nil {
-	// 		d.logger.Printf("[CACHE] using cached result for query %s", thrukURL)
+	// 		logger.Debugf("[CACHE] using cached result for query %s", thrukURL)
 	// 		return *cachedResult.result
 	// 	}
 	// }
@@ -297,7 +291,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	resp, err := d.httpClient.Do(httpReq)
 	elapsed := time.Since(start)
 	if err != nil {
-		d.logger.Printf("[Resource] request failed after %v: %v", elapsed, err)
+		logger.Debugf("request failed after %v: %v", elapsed, err)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,
 			Body:   fmt.Appendf([]byte{}, "request failed: %v", err),
@@ -307,14 +301,14 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		d.logger.Printf("[Resource] failed to read response: %v", err)
+		logger.Debugf("failed to read response: %v", err)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,
 			Body:   fmt.Appendf([]byte{}, "failed to read response: %v", err),
 		})
 	}
 
-	d.logger.Printf("[Resource] response %d (%v, %d bytes)", resp.StatusCode, elapsed, len(body))
+	logger.Debugf("response %d (%v, %d bytes)", resp.StatusCode, elapsed, len(body))
 
 	return sender.Send(&backend.CallResourceResponse{
 		Status: resp.StatusCode,

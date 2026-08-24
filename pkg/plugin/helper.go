@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -73,45 +70,6 @@ func buildColumnMetadataMap(resp *ThrukWrappedJsonResponse) map[string]ThrukWrap
 		}
 	}
 	return m
-}
-
-func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (*log.Logger, *os.File) {
-	// If logLevel is 0 or jsonData is nil, don't create a logger
-	if jsonData == nil || jsonData.LogLevel == 0 {
-		return log.New(os.Stderr, "[grafana-thruk-datasource] ", log.LstdFlags), nil
-	}
-
-	logPath := jsonData.LogPath
-	if logPath == "" {
-		logPath = "logs/plugin.log"
-	}
-
-	// Expand environment variables and ~ in the path
-	// This can be used with environment variables like ${OMD_ROOT}
-	expandedPath := os.ExpandEnv(logPath)
-	expandedPath = os.Expand(expandedPath, func(key string) string {
-		// Handle ~ expansion manually
-		if key == "~" {
-			home, _ := os.UserHomeDir()
-			return home
-		}
-		// Let os.ExpandEnv handle other env vars
-		return ""
-	})
-
-	// Create directories if they don't exist
-	dir := filepath.Dir(expandedPath)
-	if dir != "." {
-		os.MkdirAll(dir, 0755)
-	}
-
-	filename := expandedPath
-	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return log.New(os.Stderr, "[grafana-thruk-datasource] ", log.LstdFlags), nil
-	}
-
-	return log.New(f, "", log.LstdFlags), f
 }
 
 func parseVisualizationType(typeVal any) string {
