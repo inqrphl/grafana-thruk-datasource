@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -14,10 +13,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
-
-// authHeadersToScopeCache are the forwarded headers relevant for identifying the authenticated user/request.
-// They are used both for logging and to scope the response cache so that one user's Thruk data is never served to another.
-var authHeadersToScopeCache = []string{"Cookie", "Authorization", "X-Id-Token", "X-Grafana-User"}
 
 // cookieNames extracts the cookie names from the raw values of a Cookie header.
 // It never returns the cookie values themselves, so it is safe to log.
@@ -37,95 +32,12 @@ func cookieNames(cookieHeaderValues []string) []string {
 	return names
 }
 
-// buildAuthHeaders picks the auth-relevant headers out of the headers forwarded by Grafana. Returns nil when there is no auth context.
-func buildAuthHeaders(headers http.Header) map[string][]string {
-	var authHeaders map[string][]string
-	for _, name := range authHeadersToScopeCache {
-		if values, ok := headers[name]; ok {
-			if authHeaders == nil {
-				authHeaders = make(map[string][]string)
-			}
-			authHeaders[name] = values
-		}
-	}
-	return authHeaders
-}
-
 func getQueryParam(rawURL string, key string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}
 	return u.Query().Get(key)
-}
-
-// works on wrapped_json calls where metadata is present, in such calls it looks for resp.Meta.Columns
-// or normal json calls where everything is on the same object, in such calls it looks for first row
-// docs/r-v1-hosts-response.json and docs/r1-v1-thruk-response.json
-func determineColumnsFromThrukResponse(resp *ThrukWrappedJsonResponse) []string {
-	if resp.Meta != nil && len(resp.Meta.Columns) > 0 {
-		cols := make([]string, 0, len(resp.Meta.Columns))
-		for _, c := range resp.Meta.Columns {
-			cols = append(cols, c.Name)
-		}
-		return cols
-	}
-	if len(resp.Data) > 0 {
-		cols := make([]string, 0, len(resp.Data[0]))
-		for key := range resp.Data[0] {
-			cols = append(cols, key)
-		}
-		return cols
-	}
-	return nil
-}
-
-// builds a map from columnMetadata.Name -> columnMetadata
-// useful for fast lookups directly from name
-func buildColumnMetadataMap(resp *ThrukWrappedJsonResponse) map[string]ThrukWrappedJsonResponseMetaColumn {
-	m := make(map[string]ThrukWrappedJsonResponseMetaColumn)
-	if resp.Meta != nil {
-		for _, c := range resp.Meta.Columns {
-			m[c.Name] = c
-		}
-	}
-	return m
-}
-
-func parseVisualizationType(typeVal any) string {
-	if s, ok := typeVal.(string); ok {
-		if s == "timeseries" {
-			return "graph"
-		}
-		return s
-	}
-	if obj, ok := typeVal.(map[string]any); ok {
-		if v, ok := obj["value"].(string); ok {
-			if v == "timeseries" {
-				return "graph"
-			}
-			return v
-		}
-	}
-	return "table"
-}
-
-// if we know the table used in query model, we can iterate through the columns and add their backend types by hand
-// this is a band-aid fix, only use it if thruk does not report column type metadata incorrectly.
-func overrideKnownGrafanaDataTypes(qm *QueryModel, meta *ThrukWrappedJsonResponseMeta) {
-
-	findAndChangeType := func(meta *ThrukWrappedJsonResponseMeta, name string, t data.FieldType) {
-		for i := range meta.Columns {
-			if meta.Columns[i].Name == name {
-				meta.Columns[i].GrafanaDataType = t
-			}
-		}
-	}
-
-	switch qm.Table {
-	case "example-non-existent-table":
-		findAndChangeType(meta, "example-field", data.FieldTypeInt64)
-	}
 }
 
 // Applies some default http Client settings and modifies defaults of backend.DatasourceInstanceSettings.HTTPClientOpts
