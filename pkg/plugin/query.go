@@ -145,10 +145,12 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 	datasource.logger.Debugf("%s refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
 		queryMetadata.String(), query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
 
-	rewriteAliasedEndpoints(&queryModel)
+	rewriteAliasedEndpointsChanged := rewriteAliasedEndpoints(&queryModel)
 
-	datasource.logger.Debugf("rewritten refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
-		query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
+	if rewriteAliasedEndpointsChanged {
+		datasource.logger.Debugf("rewritten refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
+			query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
+	}
 
 	thrukURL := buildQueryURL(datasource, queryModel)
 

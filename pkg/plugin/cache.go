@@ -183,17 +183,24 @@ func writeCachedResult(qm *QueryModel, datasourceUID string, thrukUrl string, he
 	return nil
 }
 
-func rewriteAliasedEndpoints(qm *QueryModel) {
+func rewriteAliasedEndpoints(qm *QueryModel) (changed bool) {
 	// Aliases come from Thruk Docs
 	// https://www.thruk.org/documentation/rest.html
+
+	changed = false
 
 	// Convert to the endpoint with lower lexicographical value
 	switch qm.Table {
 	case "/index":
 		qm.Table = "/"
+		changed = true
 	case "/thruk/stats":
 		qm.Table = "/thruk/metrics"
+		changed = true
 	case "/thruk/node-control/nodes":
 		qm.Table = "/thruk/nc/odes"
+		changed = true
 	}
+
+	return changed
 }
