@@ -87,39 +87,33 @@ type Datasource struct {
 	uid        string
 }
 
-// ConfigEditor.tsx props is of type DataSourcePluginOptionsEditorProps<ThrukDataSourceOptions> , defined like this
-// DataSourcePluginOptionsEditorProps<JSONData extends DataSourceJsonData = DataSourceJsonData, SecureJSONData = {}>
-// DataSourcePluginOptionsEditorProps has a field called options, is of type: DataSourceSettings<JSONData, SecureJSONData>
-// in ConfigEditor.tsx it uses ThrukDataSourceOptions as T, which translates to  DataSourceSettings<JSONData>
-// DataSourceSettings has a field called jsonData of type T
-// Configuration of a datasource is then sent as type backend.DataSourceInstanceSettings
-// backend.DataSourceInstanceSettings has a field called jsonData, is of type json.RawMessage
-// parse it into this type, which reflects ThrukDataSourceOptions and some default options
-// ThrukDataSourceOptions extends DataSourceJsonData, is defined in types.ts
+// There are more fields in the settings.JSONData of type json.RawMessage , but not all of them are parsed or need to be parsed.
+// Only the necessary ones are defined here to be unmarshalled.
+//
+// DatasourceSettingsJSONData is a partial type to parse backend.DataSourceInstanceSettings.JSONData with
+// jsonData is assembled by the Grafana datasource config UI (src/components/ConfigEditor.tsx).
+// It mixes the plugin's own options ThrukDataSourceOptions, fields written by @grafana/plugin-ui components ConnectionSettings, Auth, AdvancedHttpSettings, and Grafana core:
 type DatasourceSettingsJSONData struct {
-	KeepCookies     []string `json:"keepCookies"`
-	LogLevel        int64    `json:"logLevel"`
-	LogPath         string   `json:"logPath"`
-	PdcInjected     *bool    `json:"pdcInjected,omitempty"`
-	ServerName      *string  `json:"serverName,omitempty"`
-	TlsAuth         *bool    `json:"tlsAuth,omitempty"`
-	TlsSkipVerify   *bool    `json:"tlsSkipVerify,omitempty"`
-	ReadOnly        *bool    `json:"readOnly,omitempty"`
-	HTTPHeaderName1 *string  `json:"httpHeaderName1,omitempty"`
-	HTTPHeaderName2 *string  `json:"httpHeaderName2,omitempty"`
-	HTTPHeaderName3 *string  `json:"httpHeaderName3,omitempty"`
-	HTTPHeaderName4 *string  `json:"httpHeaderName4,omitempty"`
-	HTTPHeaderName5 *string  `json:"httpHeaderName5,omitempty"`
-}
+	// the plugin's own options
+	// from interface ThrukDataSourceOptions in src/types.ts
+	// ======================
+	// 'thruk_auth' is always added when parsing props in ConfigEditor.tsx
+	KeepCookies []string `json:"keepCookies"`
+	// Has its own <Input> field in ConfigEditor.tsx
+	LogLevel int64 `json:"logLevel"`
+	// Has its own <Input> field in ConfigEditor.tsx
+	LogPath string `json:"logPath"`
+	// ======================
 
-type DatasourceSettingsSecureJSONData struct {
-	HTTPHeaderValue1 *string `json:"httpHeaderValue1,omitempty"`
-	HTTPHeaderValue2 *string `json:"httpHeaderValue2,omitempty"`
-	HTTPHeaderValue3 *string `json:"httpHeaderValue3,omitempty"`
-	HTTPHeaderValue4 *string `json:"httpHeaderValue4,omitempty"`
-	HTTPHeaderValue5 *string `json:"httpHeaderValue5,omitempty"`
-	TlsClientCert    *string `json:"tlsClientCert,omitempty"`
-	TlsClientKey     *string `json:"tlsClientKey,omitempty"`
+	// from Auth part part of the ConfigEditor.tsx
+	// Tls configuration is parsed in grafana-plugin-sdk-go/backend/http_settings.go:parseHTTPSettings
+	// TlsAuth       *bool   `json:"tlsAuth,omitempty"`
+	// TlsSkipVerify *bool   `json:"tlsSkipVerify,omitempty"`
+	// ServerName      *string  `json:"serverName,omitempty"`
+
+	// from Auth part part of the ConfigEditor.tsx
+	// Headers are parsed in grafana-plugin-sdk-go/backend/http_settings.go:parseHTTPSettings
+	// HTTPHeaderName1 *string  `json:"httpHeaderName1,omitempty"`
 }
 
 // This function is to be implemented accoring to the SDK interface
@@ -132,26 +126,17 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 			return nil, fmt.Errorf("failed to parse jsonData: %w", err)
 		}
 	}
-	jsonData.setDefaults()
 
 	logger, logFile := createLoggerFromDatasourceSettings(&jsonData)
 	logger.Printf("[NewDatasource] setttings:\n%s", DataSourceInstanceSettingsToString(&settings))
 
-	// SDK provides a way of building http client options directly from context
+	// SDK provides a way of building http client options directly from context. This sets
+	// Headers to forward, TLS configuration, Basic HTTP Authentication, Proxy, Timeouts, SigV4
 	httpOpts, err := settings.HTTPClientOptions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get http client options from context: %w", err)
 	}
-
-	// Always forward the headers, this is how cookies are passed
-	httpOpts.ForwardHTTPHeaders = true
-	httpOpts.Timeouts = &httpclient.TimeoutOptions{
-		Timeout: 30 * time.Second,
-	}
-
-	httpOpts.TLS = &httpclient.TLSOptions{
-		InsecureSkipVerify: *jsonData.TlsSkipVerify,
-	}
+	httpclientOptionsSetDefaults(&httpOpts)
 
 	logger.Printf("[NewDatasource] http client options: %s", HTTPClientOptionsToString(httpOpts))
 

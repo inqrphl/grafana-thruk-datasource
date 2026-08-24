@@ -230,20 +230,22 @@ func overrideKnownGrafanaDataTypes(qm *queryModel, meta *thrukMetadata) {
 	}
 }
 
-func (jsonData *DatasourceSettingsJSONData) setDefaults() {
-	if jsonData.PdcInjected == nil {
-		val := true
-		jsonData.PdcInjected = &val
-	}
+// Applies some default http Client settings and modifies defaults of backend.DatasourceInstanceSettings.HTTPClientOpts
+func httpclientOptionsSetDefaults(opts *httpclient.Options) {
+	// Always forward the headers, this is how 'thruk_auth' cookies should be passed
+	opts.ForwardHTTPHeaders = true
 
-	if jsonData.TlsAuth == nil {
-		val := true
-		jsonData.TlsAuth = &val
-	}
-
-	if jsonData.TlsSkipVerify == nil {
-		val := false
-		jsonData.TlsSkipVerify = &val
+	// Modify some of the timeouts
+	opts.Timeouts = &httpclient.TimeoutOptions{
+		Timeout:               30 * time.Second,
+		DialTimeout:           10 * time.Second,
+		KeepAlive:             httpclient.DefaultTimeoutOptions.KeepAlive,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: httpclient.DefaultTimeoutOptions.ExpectContinueTimeout,
+		MaxConnsPerHost:       httpclient.DefaultTimeoutOptions.MaxConnsPerHost,
+		MaxIdleConns:          httpclient.DefaultTimeoutOptions.MaxIdleConns,
+		MaxIdleConnsPerHost:   httpclient.DefaultTimeoutOptions.MaxIdleConnsPerHost,
+		IdleConnTimeout:       httpclient.DefaultTimeoutOptions.IdleConnTimeout,
 	}
 }
 
@@ -390,6 +392,13 @@ func HTTPClientOptionsToString(opts httpclient.Options) string {
 	if len(opts.Header) > 0 {
 		buf.WriteString(", Headers:[")
 		for key, values := range opts.Header {
+			buf.WriteString(fmt.Sprintf("%s=%v, ", key, values))
+		}
+		buf.WriteString("]")
+	}
+	if len(opts.Labels) > 0 {
+		buf.WriteString(", Labels:[")
+		for key, values := range opts.Labels {
 			buf.WriteString(fmt.Sprintf("%s=%v, ", key, values))
 		}
 		buf.WriteString("]")
