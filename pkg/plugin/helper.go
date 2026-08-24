@@ -137,7 +137,7 @@ func HTTPClientOptionsSetDefaults(opts *httpclient.Options) {
 	// These end up in the golang http.Transport
 
 	opts.Timeouts = &httpclient.TimeoutOptions{
-		Timeout:               30 * time.Second,
+		Timeout:               60 * time.Second,
 		DialTimeout:           10 * time.Second,
 		KeepAlive:             httpclient.DefaultTimeoutOptions.KeepAlive,
 		TLSHandshakeTimeout:   10 * time.Second,
