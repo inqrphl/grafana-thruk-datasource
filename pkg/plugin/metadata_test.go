@@ -41,10 +41,7 @@ func TestBuildQueryMeta(t *testing.T) {
 		},
 	}
 
-	meta := buildQueryMetadata(ctx, req)
-	if meta == nil {
-		t.Fatal("buildQueryMeta returned nil")
-	}
+	meta := buildQueryMetadataFromContext(ctx, req)
 	if meta.User == nil || meta.User.Login != "alice" {
 		t.Fatalf("expected user alice, got %+v", meta.User)
 	}
@@ -76,10 +73,7 @@ func TestBuildQueryMetaWithoutUser(t *testing.T) {
 	ctx := context.Background()
 	req := &backend.QueryDataRequest{}
 
-	meta := buildQueryMetadata(ctx, req)
-	if meta == nil {
-		t.Fatal("buildQueryMeta returned nil")
-	}
+	meta := buildQueryMetadataFromContext(ctx, req)
 	if meta.User != nil {
 		t.Fatalf("expected nil user, got %+v", meta.User)
 	}

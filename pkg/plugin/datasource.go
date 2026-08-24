@@ -198,12 +198,11 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	meta := buildQueryMetadata(ctx, req)
 	logger.Debugf("received %d queries", len(req.Queries))
 
 	response := backend.NewQueryDataResponse()
 	for _, q := range req.Queries {
-		res := query(ctx, d, q, meta)
+		res := query(ctx, d, q, req)
 		response.Responses[q.RefID] = res
 	}
 

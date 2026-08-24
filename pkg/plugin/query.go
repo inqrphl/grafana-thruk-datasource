@@ -15,9 +15,9 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
-// queryMetadata captures per-request metadata from Grafana (user, org, headers)
+// QueryMetadata captures per-request metadata from Grafana (user, org, headers)
 // plus the frontend-injected dashboard/panel context from the query JSON.
-type queryMetadata struct {
+type QueryMetadata struct {
 	// OrgID is deprecated on the SDK, do not define or use it
 	// OrgID          int64
 	Namespace      string
@@ -40,11 +40,11 @@ type queryMetadata struct {
 	authHeaders map[string][]string
 }
 
-// buildQueryMetadata extracts user/org/header metadata from the query context and the request.
+// buildQueryMetadataFromContext extracts user/org/header metadata from the query context and the request.
 // The frontend-injected dashboard/panel fields are filled in later per query, once the query JSON has been parsed.
-func buildQueryMetadata(ctx context.Context, req *backend.QueryDataRequest) *queryMetadata {
+func buildQueryMetadataFromContext(ctx context.Context, req *backend.QueryDataRequest) QueryMetadata {
 	pc := backend.PluginConfigFromContext(ctx)
-	meta := &queryMetadata{
+	meta := QueryMetadata{
 		// OrgID is deprecated on the SDK, do not define or use it
 		// OrgID:         pc.OrgID,
 		Namespace:     pc.Namespace,
@@ -65,7 +65,7 @@ func buildQueryMetadata(ctx context.Context, req *backend.QueryDataRequest) *que
 }
 
 // hasCookie reports whether the forwarded Cookie header contains a cookie with the given name.
-func (m *queryMetadata) hasCookie(name string) bool {
+func (m *QueryMetadata) hasCookie(name string) bool {
 	for _, value := range m.authHeaders["Cookie"] {
 		for _, part := range strings.Split(value, ";") {
 			part = strings.TrimSpace(part)
@@ -78,7 +78,7 @@ func (m *queryMetadata) hasCookie(name string) bool {
 }
 
 // String returns a compact single-line representation of the request metadata for logging/auditing.
-func (m *queryMetadata) String() string {
+func (m *QueryMetadata) String() string {
 	user := "none"
 	if m.User != nil {
 		user = fmt.Sprintf("%s (%s, %s, role=%s)", m.User.Login, m.User.Name, m.User.Email, m.User.Role)
@@ -99,34 +99,34 @@ func (m *queryMetadata) String() string {
 	)
 }
 
-func query(ctx context.Context, datasource *Datasource, query backend.DataQuery, meta *queryMetadata) backend.DataResponse {
-	var qm queryModel
-	if err := json.Unmarshal(query.JSON, &qm); err != nil {
+func query(ctx context.Context, datasource *Datasource, query backend.DataQuery, backendReq *backend.QueryDataRequest) backend.DataResponse {
+	var queryModel queryModel
+	if err := json.Unmarshal(query.JSON, &queryModel); err != nil {
 		logger.Debugf("refId=%s unmarshal error: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
 	}
 
 	// merge the frontend-injected dashboard/panel context into a per-query copy
-	qmeta := *meta
-	qmeta.DashboardUID = qm.DashboardUID
-	qmeta.DashboardTitle = qm.DashboardTitle
-	qmeta.PanelId = qm.PanelId
-	qmeta.PanelName = qm.PanelName
-	qmeta.PanelPluginId = qm.PanelPluginId
-	qmeta.App = qm.App
-	qmeta.RequestUrl = qm.RequestUrl
+	queryMetadata := buildQueryMetadataFromContext(ctx, backendReq)
+	queryMetadata.DashboardUID = queryModel.DashboardUID
+	queryMetadata.DashboardTitle = queryModel.DashboardTitle
+	queryMetadata.PanelId = queryModel.PanelId
+	queryMetadata.PanelName = queryModel.PanelName
+	queryMetadata.PanelPluginId = queryModel.PanelPluginId
+	queryMetadata.App = queryModel.App
+	queryMetadata.RequestUrl = queryModel.RequestUrl
 
 	logger.Debugf("%s refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
-		qmeta.String(), query.RefID, qm.Table, qm.Columns, qm.Condition, qm.Limit, qm.Type)
+		queryMetadata.String(), query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
 
-	rewriteAliasedEndpoints(&qm)
+	rewriteAliasedEndpoints(&queryModel)
 
 	logger.Debugf("rewritten refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
-		query.RefID, qm.Table, qm.Columns, qm.Condition, qm.Limit, qm.Type)
+		query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
 
-	thrukURL := buildQueryURL(datasource, qm)
+	thrukURL := buildQueryURL(datasource, queryModel)
 
-	cachedResult, err := getCachedResult(&qm, datasource.uid, thrukURL, &qmeta.authHeaders)
+	cachedResult, err := getCachedResult(&queryModel, datasource.uid, thrukURL, &queryMetadata.authHeaders)
 	if err != nil {
 		logger.Debugf("refId=%s error when getting cached result: %s", query.RefID, err.Error())
 	}
@@ -135,23 +135,23 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 		return *cachedResult.result
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
+	thrukReq, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {
 		logger.Debugf("refId=%s failed to create request: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to create request: %v", err))
 	}
-	req.Header.Set("X-THRUK-OutputFormat", "wrapped_json")
+	thrukReq.Header.Set("X-THRUK-OutputFormat", "wrapped_json")
 
 	// The SDK forwards headers itself when ForwardHTTPHeaders is enabled, but still
 	// set the Cookie explicitly as a safety net
 	// this is for requests without a Grafana web frontend session, e.g. the ones done by the Alerting system
-	if cookies := qmeta.authHeaders["Cookie"]; len(cookies) > 0 {
-		req.Header.Set("Cookie", strings.Join(cookies, "; "))
+	if cookies := queryMetadata.authHeaders["Cookie"]; len(cookies) > 0 {
+		thrukReq.Header.Set("Cookie", strings.Join(cookies, "; "))
 	}
 
 	logger.Debugf("refId=%s HTTP GET %s", query.RefID, thrukURL)
 	start := time.Now()
-	resp, err := datasource.httpClient.Do(req)
+	resp, err := datasource.httpClient.Do(thrukReq)
 	elapsed := time.Since(start)
 	if err != nil {
 		logger.Debugf("refId=%s request failed after %v: %v", query.RefID, elapsed, err)
@@ -172,10 +172,10 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 	}
 
 	parseStart := time.Now()
-	result := parseThrukResponse(body, qm, query.TimeRange)
+	result := parseThrukResponse(body, queryModel, query.TimeRange)
 	logger.Debugf("refId=%s parsed in %v", query.RefID, time.Since(parseStart))
 
-	err = writeCachedResult(&qm, datasource.uid, thrukURL, &qmeta.authHeaders, &result)
+	err = writeCachedResult(&queryModel, datasource.uid, thrukURL, &queryMetadata.authHeaders, &result)
 	if err != nil {
 		logger.Debugf("refId=%s error when writing cached result: %s", query.RefID, err.Error())
 	}
