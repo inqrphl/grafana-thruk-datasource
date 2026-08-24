@@ -235,8 +235,6 @@ func buildQueryURL(datasource *Datasource, qm QueryModel) string {
 
 // intended to parse thruk reponses in wrapped_json format
 // The "data" field of the json can either be an array of objects or simply an object
-// Take a look under /docs/call-r-v1-hosts.sh for an array response.
-// Take a look under /docs/call-r-v1-services-totals.sh for an object example
 func parseThrukResponse(body []byte, qm QueryModel, timeRange backend.TimeRange, logger *zap.SugaredLogger) backend.DataResponse {
 	var thrukResp ThrukWrappedJsonResponse
 
@@ -569,7 +567,6 @@ func parseVisualizationType(typeVal any) string {
 
 // works on wrapped_json calls where metadata is present, in such calls it looks for resp.Meta.Columns
 // or normal json calls where everything is on the same object, in such calls it looks for first row
-// docs/r-v1-hosts-response.json and docs/r1-v1-thruk-response.json
 func determineColumnsFromThrukResponse(resp *ThrukWrappedJsonResponse) []string {
 	if resp.Meta != nil && len(resp.Meta.Columns) > 0 {
 		cols := make([]string, 0, len(resp.Meta.Columns))
