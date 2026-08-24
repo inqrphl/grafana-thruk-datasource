@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -16,6 +18,24 @@ import (
 // authHeadersToScopeCache are the forwarded headers relevant for identifying the authenticated user/request.
 // They are used both for logging and to scope the response cache so that one user's Thruk data is never served to another.
 var authHeadersToScopeCache = []string{"Cookie", "Authorization", "X-Id-Token", "X-Grafana-User"}
+
+// cookieNames extracts the cookie names from the raw values of a Cookie header.
+// It never returns the cookie values themselves, so it is safe to log.
+func cookieNames(cookieHeaderValues []string) []string {
+	var names []string
+	for _, value := range cookieHeaderValues {
+		for _, part := range strings.Split(value, ";") {
+			name := strings.TrimSpace(part)
+			if eq := strings.IndexByte(name, '='); eq >= 0 {
+				name = name[:eq]
+			}
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
 
 // buildAuthHeaders picks the auth-relevant headers out of the headers forwarded by Grafana. Returns nil when there is no auth context.
 func buildAuthHeaders(headers http.Header) map[string][]string {
@@ -144,13 +164,13 @@ func DataSourceInstanceSettingsToString(s *backend.DataSourceInstanceSettings) s
 
 	var decryptedDataStr string
 	if s.DecryptedSecureJSONData != nil {
-		// Pretty-print the map as JSON
-		decryptedBytes, err := json.MarshalIndent(s.DecryptedSecureJSONData, "", "  ")
-		if err == nil {
-			decryptedDataStr = "\n" + string(decryptedBytes)
-		} else {
-			decryptedDataStr = "\n(map marshaling error)"
+		// log only the keys, never the secret values
+		keys := make([]string, 0, len(s.DecryptedSecureJSONData))
+		for k := range s.DecryptedSecureJSONData {
+			keys = append(keys, k)
 		}
+		sort.Strings(keys)
+		decryptedDataStr = "\n" + strings.Join(keys, "\n")
 	} else {
 		decryptedDataStr = "nil"
 	}
@@ -268,11 +288,13 @@ func HTTPClientOptionsToString(opts httpclient.Options) string {
 		buf.WriteString(fmt.Sprintf(", BasicAuth.User:%s", opts.BasicAuth.User))
 	}
 	if len(opts.Header) > 0 {
-		buf.WriteString(", Headers:[")
-		for key, values := range opts.Header {
-			buf.WriteString(fmt.Sprintf("%s=%v, ", key, values))
+		// log only the header names, never the values (they may contain secrets)
+		keys := make([]string, 0, len(opts.Header))
+		for key := range opts.Header {
+			keys = append(keys, key)
 		}
-		buf.WriteString("]")
+		sort.Strings(keys)
+		buf.WriteString(", Headers:[" + strings.Join(keys, ", ") + "]")
 	}
 	if len(opts.Labels) > 0 {
 		buf.WriteString(", Labels:[")

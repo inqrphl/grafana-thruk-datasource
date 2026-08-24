@@ -98,7 +98,7 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 	logger = logger.With("datasource", settings.UID)
-	logger.Debugf("setttings:\n%s", DataSourceInstanceSettingsToString(&settings))
+	logger.Debugf("settings:\n%s", DataSourceInstanceSettingsToString(&settings))
 
 	// SDK provides a way of building http client options directly from context. This sets
 	// Headers to forward, TLS configuration, Basic HTTP Authentication, Proxy, Timeouts, SigV4
@@ -130,10 +130,9 @@ func (d *Datasource) Dispose() {
 
 // This function is to be implemented accoring to the SDK interface
 func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	logger.Infof("testing connection")
+	logger.Debugf("checking connection to Thruk")
 
 	thrukURL := d.url + "/r/v1/thruk?columns=thruk_version"
-	logger.Debugf("thrukUrl: %s\n", thrukURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {
@@ -143,14 +142,14 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 			Message: fmt.Sprintf("Failed to create request: %v", err),
 		}, nil
 	}
-	logger.Debugf("Cookie Header Values: %s", strings.Join(req.Header.Values("Cookie"), ","))
+	logger.Debugf("request cookies: %v", cookieNames(req.Header.Values("Cookie")))
 
-	logger.Debugf("HTTP GET %s\n", thrukURL)
+	logger.Debugf("HTTP GET %s", thrukURL)
 	start := time.Now()
 	resp, err := d.httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
-		logger.Debugf("connection failed after %v: %v", d.uid, elapsed, err)
+		logger.Debugf("connection failed after %v: %v", elapsed, err)
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("Connection failed: %v", err),
@@ -164,8 +163,8 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 		ThrukVersion string `json:"thruk_version"`
 	}
 
-	logger.Debugf("response code: %d , elapsed: %v", d.uid, resp.StatusCode, elapsed)
-	logger.Debugf("response body: %s", d.uid, string(body))
+	logger.Debugf("response code: %d, elapsed: %v", resp.StatusCode, elapsed)
+	logger.Debugf("response body: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
 		return &backend.CheckHealthResult{
@@ -243,7 +242,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 		columns := getQueryParam(req.URL, "columns")
 		limit := getQueryParam(req.URL, "limit")
 		if table == "" {
-			logger.Debugf("[Resource] variable-query missing table parameter")
+			logger.Debugf("variable-query missing table parameter")
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
 				Body:   []byte("missing 'table' query parameter"),
@@ -260,7 +259,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	}
 
 	thrukURL := d.url + thrukPath
-	logger.Debugf("GET thrukUrl: %s", thrukURL)
+	logger.Debugf("GET thrukURL: %s", thrukURL)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {

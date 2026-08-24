@@ -38,7 +38,7 @@ func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (e
 	case 7:
 		logLevel = zapcore.DebugLevel
 	default:
-		return fmt.Errorf("invalid logLevel %d, has to be between [0-7]", logLevel)
+		return fmt.Errorf("invalid logLevel %d, has to be between [0-7]", jsonData.LogLevel)
 	}
 
 	// default logPath is relative, useful for developing in-repository

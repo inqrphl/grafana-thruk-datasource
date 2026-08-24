@@ -125,20 +125,19 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 		query.RefID, qm.Table, qm.Columns, qm.Condition, qm.Limit, qm.Type)
 
 	thrukURL := buildQueryURL(datasource, qm)
-	logger.Debugf("thrukURL: %s", thrukURL)
 
 	cachedResult, err := getCachedResult(&qm, datasource.uid, thrukURL, &qmeta.authHeaders)
 	if err != nil {
-		logger.Debugf("error when getting cached result: %s", err.Error())
+		logger.Debugf("refId=%s error when getting cached result: %s", query.RefID, err.Error())
 	}
 	if cachedResult != nil {
-		logger.Debugf("found and using cached result for query %s", thrukURL)
+		logger.Debugf("refId=%s found and using cached result for query %s", query.RefID, thrukURL)
 		return *cachedResult.result
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {
-		logger.Debugf("failed to create request: %v", err)
+		logger.Debugf("refId=%s failed to create request: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to create request: %v", err))
 	}
 	req.Header.Set("X-THRUK-OutputFormat", "wrapped_json")
@@ -150,23 +149,23 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 		req.Header.Set("Cookie", strings.Join(cookies, "; "))
 	}
 
-	logger.Debugf("HTTP GET %s\n", thrukURL)
+	logger.Debugf("refId=%s HTTP GET %s", query.RefID, thrukURL)
 	start := time.Now()
 	resp, err := datasource.httpClient.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
-		logger.Debugf("request failed after %v: %v", elapsed, err)
+		logger.Debugf("refId=%s request failed after %v: %v", query.RefID, elapsed, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("request failed: %v", err))
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Debugf("failed to read response: %v", err)
+		logger.Debugf("refId=%s failed to read response: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to read response: %v", err))
 	}
 
-	logger.Debugf("response code: %d %s , elapsed: %v , bytes: %d", resp.StatusCode, resp.Status, elapsed, len(body))
+	logger.Debugf("refId=%s response code: %d %s, elapsed: %v, bytes: %d", query.RefID, resp.StatusCode, resp.Status, elapsed, len(body))
 
 	if resp.StatusCode != http.StatusOK {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("thruk returned status: %d , body: %s", resp.StatusCode, string(body)))
@@ -178,7 +177,7 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 
 	err = writeCachedResult(&qm, datasource.uid, thrukURL, &qmeta.authHeaders, &result)
 	if err != nil {
-		logger.Debugf("error when writing cached result: %s", err.Error())
+		logger.Debugf("refId=%s error when writing cached result: %s", query.RefID, err.Error())
 	}
 
 	return result
@@ -240,7 +239,7 @@ func parseThrukResponse(body []byte, qm queryModel, timeRange backend.TimeRange)
 			// Try as single JsonObject
 			var singleJsonObject map[string]any
 			if err := json.Unmarshal(body, &singleJsonObject); err != nil {
-				logger.Debugf("[QueryData] failed to parse response: %v", err)
+				logger.Debugf("failed to parse response: %v", err)
 				return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to parse response: %v", err))
 			}
 			thrukResp.Data = []map[string]any{singleJsonObject}
@@ -248,7 +247,7 @@ func parseThrukResponse(body []byte, qm queryModel, timeRange backend.TimeRange)
 	}
 
 	if len(thrukResp.Data) == 0 {
-		logger.Debugf("[QueryData] empty response, 0 rows returned")
+		logger.Debugf("empty response, 0 rows returned")
 		return backend.DataResponse{Frames: data.Frames{data.NewFrame("response")}}
 	}
 
@@ -286,7 +285,7 @@ func buildTableFrame(qm *queryModel, thrukResp *ThrukWrappedJsonResponse, visTyp
 		field := data.NewFieldFromFieldType(fieldType, 0)
 		field.Name = col
 
-		logger.Debugf("[TableFrame] building column: %s , fieldType is unknown: %t , final fieldType: %s", col, unknownFieldType, FieldTypeToString(fieldType))
+		logger.Debugf("building column: %s, fieldType is unknown: %t, final fieldType: %s", col, unknownFieldType, FieldTypeToString(fieldType))
 
 		for _, row := range thrukResp.Data {
 			val := row[col]
@@ -372,7 +371,7 @@ func buildTableFrame(qm *queryModel, thrukResp *ThrukWrappedJsonResponse, visTyp
 		frame.Fields = append(frame.Fields, field)
 	}
 
-	logger.Debugf("[QueryData] table: %d rows, %d columns", len(thrukResp.Data), len(columns))
+	logger.Debugf("table: %d rows, %d columns", len(thrukResp.Data), len(columns))
 	frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisType(visType)}
 	return backend.DataResponse{Frames: data.Frames{frame}}
 }
@@ -431,7 +430,7 @@ func buildTimeseriesFrames(thrukResp *ThrukWrappedJsonResponse, timeRange backen
 	}
 
 	var frames data.Frames
-	logger.Debugf("[QueryData] timeseries: %d rows, valueCol=%s, nameCols=%v", len(dataRows), valueCol, nameCols)
+	logger.Debugf("timeseries: %d rows, valueCol=%s, nameCols=%v", len(dataRows), valueCol, nameCols)
 
 	for _, row := range dataRows {
 		val := row[valueCol]
