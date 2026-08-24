@@ -5,10 +5,13 @@ import (
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"go.uber.org/zap"
 )
 
 func TestQueryData(t *testing.T) {
-	ds := Datasource{}
+	ds := Datasource{
+		logger: zap.NewNop().Sugar(),
+	}
 
 	resp, err := ds.QueryData(
 		context.Background(),

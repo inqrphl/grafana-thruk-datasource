@@ -13,13 +13,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var (
-	logger *zap.SugaredLogger
-)
-
-func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (err error) {
+func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (lg *zap.SugaredLogger, err error) {
 	if jsonData == nil {
-		return fmt.Errorf("passed jsonData is nil")
+		return nil, fmt.Errorf("passed jsonData is nil")
 	}
 
 	// imitiate syslog(3) log levels
@@ -38,7 +34,7 @@ func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (e
 	case 7:
 		logLevel = zapcore.DebugLevel
 	default:
-		return fmt.Errorf("invalid logLevel %d, has to be between [0-7]", jsonData.LogLevel)
+		return nil, fmt.Errorf("invalid logLevel %d, has to be between [0-7]", jsonData.LogLevel)
 	}
 
 	// default logPath is relative, useful for developing in-repository
@@ -69,7 +65,7 @@ func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (e
 	filename := expandedPath
 	_, err = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	config := zap.NewProductionConfig()
@@ -93,8 +89,9 @@ func createLoggerFromDatasourceSettings(jsonData *DatasourceSettingsJSONData) (e
 	config.Level.SetLevel(logLevel)
 
 	loggerNormal, err := config.Build()
+	if err != nil {
+		return nil, err
+	}
 
-	logger = loggerNormal.Sugar()
-
-	return err
+	return loggerNormal.Sugar(), nil
 }

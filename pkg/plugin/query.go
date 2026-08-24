@@ -13,6 +13,7 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
+	"go.uber.org/zap"
 )
 
 // What a query coming in from Grafana will contain
@@ -123,7 +124,7 @@ func (m *QueryMetadata) String() string {
 func query(ctx context.Context, datasource *Datasource, query backend.DataQuery, backendReq *backend.QueryDataRequest) backend.DataResponse {
 	var queryModel QueryModel
 	if err := json.Unmarshal(query.JSON, &queryModel); err != nil {
-		logger.Debugf("refId=%s unmarshal error: %v", query.RefID, err)
+		datasource.logger.Debugf("refId=%s unmarshal error: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
 	}
 
@@ -137,28 +138,28 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 	queryMetadata.App = queryModel.App
 	queryMetadata.RequestUrl = queryModel.RequestUrl
 
-	logger.Debugf("%s refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
+	datasource.logger.Debugf("%s refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
 		queryMetadata.String(), query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
 
 	rewriteAliasedEndpoints(&queryModel)
 
-	logger.Debugf("rewritten refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
+	datasource.logger.Debugf("rewritten refId=%s table=%s columns=%v condition=%q limit=%d type=%v",
 		query.RefID, queryModel.Table, queryModel.Columns, queryModel.Condition, queryModel.Limit, queryModel.Type)
 
 	thrukURL := buildQueryURL(datasource, queryModel)
 
 	cachedResult, err := getCachedResult(&queryModel, datasource.uid, thrukURL, &queryMetadata.authHeaders)
 	if err != nil {
-		logger.Debugf("refId=%s error when getting cached result: %s", query.RefID, err.Error())
+		datasource.logger.Debugf("refId=%s error when getting cached result: %s", query.RefID, err.Error())
 	}
 	if cachedResult != nil {
-		logger.Debugf("refId=%s found and using cached result for query %s", query.RefID, thrukURL)
+		datasource.logger.Debugf("refId=%s found and using cached result for query %s", query.RefID, thrukURL)
 		return *cachedResult.result
 	}
 
 	thrukReq, err := http.NewRequestWithContext(ctx, "GET", thrukURL, nil)
 	if err != nil {
-		logger.Debugf("refId=%s failed to create request: %v", query.RefID, err)
+		datasource.logger.Debugf("refId=%s failed to create request: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to create request: %v", err))
 	}
 	thrukReq.Header.Set("X-THRUK-OutputFormat", "wrapped_json")
@@ -170,35 +171,35 @@ func query(ctx context.Context, datasource *Datasource, query backend.DataQuery,
 		thrukReq.Header.Set("Cookie", strings.Join(cookies, "; "))
 	}
 
-	logger.Debugf("refId=%s HTTP GET %s", query.RefID, thrukURL)
+	datasource.logger.Debugf("refId=%s HTTP GET %s", query.RefID, thrukURL)
 	start := time.Now()
 	resp, err := datasource.httpClient.Do(thrukReq)
 	elapsed := time.Since(start)
 	if err != nil {
-		logger.Debugf("refId=%s request failed after %v: %v", query.RefID, elapsed, err)
+		datasource.logger.Debugf("refId=%s request failed after %v: %v", query.RefID, elapsed, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("request failed: %v", err))
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Debugf("refId=%s failed to read response: %v", query.RefID, err)
+		datasource.logger.Debugf("refId=%s failed to read response: %v", query.RefID, err)
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("failed to read response: %v", err))
 	}
 
-	logger.Debugf("refId=%s response code: %d %s, elapsed: %v, bytes: %d", query.RefID, resp.StatusCode, resp.Status, elapsed, len(body))
+	datasource.logger.Debugf("refId=%s response code: %d %s, elapsed: %v, bytes: %d", query.RefID, resp.StatusCode, resp.Status, elapsed, len(body))
 
 	if resp.StatusCode != http.StatusOK {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("thruk returned status: %d , body: %s", resp.StatusCode, string(body)))
 	}
 
 	parseStart := time.Now()
-	result := parseThrukResponse(body, queryModel, query.TimeRange)
-	logger.Debugf("refId=%s parsed in %v", query.RefID, time.Since(parseStart))
+	result := parseThrukResponse(body, queryModel, query.TimeRange, datasource.logger)
+	datasource.logger.Debugf("refId=%s parsed in %v", query.RefID, time.Since(parseStart))
 
 	err = writeCachedResult(&queryModel, datasource.uid, thrukURL, &queryMetadata.authHeaders, &result)
 	if err != nil {
-		logger.Debugf("refId=%s error when writing cached result: %s", query.RefID, err.Error())
+		datasource.logger.Debugf("refId=%s error when writing cached result: %s", query.RefID, err.Error())
 	}
 
 	return result
@@ -230,7 +231,7 @@ func buildQueryURL(datasource *Datasource, qm QueryModel) string {
 // The "data" field of the json can either be an array of objects or simply an object
 // Take a look under /docs/call-r-v1-hosts.sh for an array response.
 // Take a look under /docs/call-r-v1-services-totals.sh for an object example
-func parseThrukResponse(body []byte, qm QueryModel, timeRange backend.TimeRange) backend.DataResponse {
+func parseThrukResponse(body []byte, qm QueryModel, timeRange backend.TimeRange, logger *zap.SugaredLogger) backend.DataResponse {
 	var thrukResp ThrukWrappedJsonResponse
 
 	// Try wrapped_json format: { "data": <array|object> , "meta": {...} }
@@ -275,15 +276,15 @@ func parseThrukResponse(body []byte, qm QueryModel, timeRange backend.TimeRange)
 	visType := parseVisualizationType(qm.Type)
 
 	if visType == "graph" {
-		return buildTimeseriesFrames(&thrukResp, timeRange, qm)
+		return buildTimeseriesFrames(&thrukResp, timeRange, qm, logger)
 	}
 
-	return buildTableFrame(&qm, &thrukResp, visType)
+	return buildTableFrame(&qm, &thrukResp, visType, logger)
 }
 
 // This function assumes that thrukResponse.Data is of type []map[string]any
 // Even when the response was a single object, it is converted in parseThrukResponse method
-func buildTableFrame(qm *QueryModel, thrukResp *ThrukWrappedJsonResponse, visType string) backend.DataResponse {
+func buildTableFrame(qm *QueryModel, thrukResp *ThrukWrappedJsonResponse, visType string, logger *zap.SugaredLogger) backend.DataResponse {
 
 	// add known query types from query model and columns
 	overrideKnownGrafanaDataTypes(qm, thrukResp.Meta)
@@ -402,7 +403,7 @@ func buildTableFrame(qm *QueryModel, thrukResp *ThrukWrappedJsonResponse, visTyp
 // Each data row becomes its own frame. Columns with aggregation functions (e.g. "count()")
 // or numeric values become the value column; remaining columns form the series alias.
 // The value is spread across 10 evenly-spaced time points covering the query's time range.
-func buildTimeseriesFrames(thrukResp *ThrukWrappedJsonResponse, timeRange backend.TimeRange, qm QueryModel) backend.DataResponse {
+func buildTimeseriesFrames(thrukResp *ThrukWrappedJsonResponse, timeRange backend.TimeRange, qm QueryModel, logger *zap.SugaredLogger) backend.DataResponse {
 	const steps = 10
 	from := timeRange.From.Unix()
 	to := timeRange.To.Unix()
