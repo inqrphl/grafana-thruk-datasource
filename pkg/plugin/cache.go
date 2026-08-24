@@ -10,11 +10,11 @@ import (
 )
 
 type CachedResult struct {
-	datasourceUID string
-	thrukUrl      string
-	headers       *map[string][]string
-	result        *backend.DataResponse
-	expiry        time.Time
+	datasourceUID  string
+	thrukUrl       string
+	headers        *map[string][]string
+	result         *backend.DataResponse
+	expirationTime time.Time
 }
 
 var (
@@ -64,7 +64,7 @@ func cleanupExpiredResults() {
 
 	now := time.Now()
 	for _, cachedResult := range cachedResults {
-		if cachedResult.expiry.Before(now) {
+		if cachedResult.expirationTime.Before(now) {
 			continue
 		}
 		newCachedresults = append(newCachedresults, cachedResult)
@@ -84,7 +84,9 @@ func init() {
 }
 
 type CachePolicy struct {
-	filterToTables  *[]string
+	// policy will only work on these tables, if defined
+	filterToTables *[]string
+	// policy will only work when these headers are present
 	filterToHeaders *[]string
 	cacheDuration   time.Duration
 }
@@ -94,17 +96,17 @@ var (
 		{
 			&[]string{"/", "/index", "/thruk"},
 			nil,
-			24 * time.Hour,
+			1 * time.Hour,
 		},
 		{
 			&[]string{"/users"},
 			nil,
-			30 * time.Minute,
+			1 * time.Minute,
 		},
 		{
-			&[]string{"/sites", "/thruk/recurring_downtimes"},
+			&[]string{"/sites"},
 			nil,
-			10 * time.Minute,
+			1 * time.Minute,
 		},
 		{
 			nil,
@@ -116,11 +118,14 @@ var (
 
 func findCachePolicy(qm *QueryModel, headers *map[string][]string) *CachePolicy {
 	for _, policy := range cachePolicies {
+
 		if policy.filterToTables != nil &&
 			qm == nil &&
+			qm.Table != "" &&
 			!slices.Contains(*policy.filterToTables, qm.Table) {
 			continue
 		}
+
 		if policy.filterToHeaders != nil &&
 			headers != nil &&
 			len(*headers) > 0 &&
@@ -147,8 +152,8 @@ func getCachedResult(qm *QueryModel, datasourceUID string, thrukUrl string, head
 	}
 
 	now := time.Now()
-	if cachedResult.expiry.Before(now) {
-		return nil, fmt.Errorf("Cached result expiry : %s is before current time: %s", cachedResult.expiry.Format(time.RFC3339), now.Format(time.RFC3339))
+	if cachedResult.expirationTime.Before(now) {
+		return nil, fmt.Errorf("Cached result expiration time : %s is expired, current time: %s", cachedResult.expirationTime.Format(time.RFC3339), now.Format(time.RFC3339))
 	}
 
 	return cachedResult, nil
@@ -168,11 +173,11 @@ func writeCachedResult(qm *QueryModel, datasourceUID string, thrukUrl string, he
 	defer cachedResultsMutex.Unlock()
 
 	cachedResults = append(cachedResults, &CachedResult{
-		datasourceUID: datasourceUID,
-		thrukUrl:      thrukUrl,
-		headers:       headers,
-		result:        result,
-		expiry:        time.Now().Add(cachePolicy.cacheDuration),
+		datasourceUID:  datasourceUID,
+		thrukUrl:       thrukUrl,
+		headers:        headers,
+		result:         result,
+		expirationTime: time.Now().Add(cachePolicy.cacheDuration),
 	})
 
 	return nil
